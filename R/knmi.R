@@ -1,3 +1,5 @@
+#' @importFrom dplyr %>%
+
 #' R wrapper for knmi daily data api
 #'
 #' @param start The start time
@@ -17,28 +19,46 @@ knmi_get_data <- function(start, end, vars, stns) {
     )
   )
 
-  measurements <- httr::content(r, as = "raw") %>%
+  content <- httr::content(r, as = "raw")
+
+  cols <- content %>%
+    readr::read_lines() %>%
+    purrr::keep(~stringr::str_detect(.x, "^# STN,YYYYMMDD")) %>%
+    stringr::str_replace_all("[\\#\\s]+", "") %>%
+    stringr::str_split(",") %>%
+    dplyr::first()
+
+  measurements <- content %>%
     readr::read_delim(
       ",",
       comment = "#",
-      col_names = c("Station", "Date", "Temperature"),
-      col_types = "ici",
+      col_names = cols,
+      col_types = readr::cols(YYYYMMDD = readr::col_date(format = "%Y%m%d"), .default = col_integer()),
       trim_ws = TRUE
     )
 
-  stations <- httr::content(r, as = "raw") %>%
+  station_cols <- content %>%
     readr::read_lines() %>%
-    data.frame(X1 = .) %>%
-    dplyr::filter(stringr::str_detect(X1, "# \\d+:")) %>%
-    tidyr::separate(X1, into = c("Station", "Lat", "Lon", "Alt", "Name"), sep = "\\s{2,}") %>%
-    dplyr::mutate(
-      Station = Station %>% stringr::str_match("# (\\d+)\\:") %>% .[,2] %>% as.numeric(),
-      Lon = as.numeric(Lon),
-      Lat = as.numeric(Lat)
+    purrr::keep(~stringr::str_detect(.x, "^# STN\\s+")) %>%
+    stringr::str_replace_all("[#\\:]+", "") %>%
+    stringr::str_trim() %>%
+    stringr::str_split("\\s{2,}") %>%
+    dplyr::first() %>%
+    purrr::map(~(if(.x == "STN") .x else paste0("STN_", .x))) %>%
+    as.character()
+
+  stations <- content %>%
+    readr::read_lines() %>%
+    purrr::keep(~stringr::str_detect(.x, "^# \\d+\\:")) %>%
+    stringr::str_replace_all("[#\\:]+", "") %>%
+    stringr::str_replace_all("\\s{2,}", ",") %>%
+    stringr::str_trim() %>%
+    readr::read_delim(
+      ",",
+      col_names = station_cols,
+      col_types = readr::cols(STN_NAME = readr::col_character(), STN = readr::col_integer(), .default = col_number())
     )
 
-  temp <- measurements %>%
+  measurements %>%
     dplyr::left_join(stations)
-
-  return(temp)
 }
