@@ -1,6 +1,7 @@
 #' @importFrom dplyr %>%
 
 #' R wrapper for knmi daily data api
+#' https://www.knmi.nl/kennis-en-datacentrum/achtergrond/data-ophalen-vanuit-een-script
 #'
 #' @param start The start time
 #' @param end The end time
@@ -14,8 +15,8 @@ knmi_get_data <- function(start, end, vars, stns) {
     body = list(
       start = start,
       end = end,
-      vars = vars,
-      stns = stns
+      vars = if(length(vars) > 1) vars %>% paste(collapse = ":") else vars,
+      stns = if(length(stns) > 1) stns %>% paste(collapse = ":") else stns
     )
   )
 
@@ -33,7 +34,7 @@ knmi_get_data <- function(start, end, vars, stns) {
       ",",
       comment = "#",
       col_names = cols,
-      col_types = readr::cols(YYYYMMDD = readr::col_date(format = "%Y%m%d"), .default = col_integer()),
+      col_types = readr::cols(YYYYMMDD = readr::col_date(format = "%Y%m%d"), .default = readr::col_integer()),
       trim_ws = TRUE
     )
 
@@ -56,7 +57,7 @@ knmi_get_data <- function(start, end, vars, stns) {
     readr::read_delim(
       ",",
       col_names = station_cols,
-      col_types = readr::cols(STN_NAME = readr::col_character(), STN = readr::col_integer(), .default = col_number())
+      col_types = readr::cols(STN_NAME = readr::col_character(), STN = readr::col_integer(), .default = readr::col_number())
     )
 
   measurements %>%
